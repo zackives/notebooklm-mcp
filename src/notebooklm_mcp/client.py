@@ -16,6 +16,12 @@ from selenium.webdriver.chrome.options import Options as ChromeOptions
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.common.by import By
+from selenium.webdriver.common.keys import Keys
+from selenium.webdriver.support.ui import Select
+from selenium.common.exceptions import NoSuchElementException
+from selenium.common.exceptions import NoAlertPresentException
+import unittest, re
 
 try:
     import undetected_chromedriver as uc
@@ -467,6 +473,136 @@ class NotebookLMClient:
             return self.driver.current_url
         except TimeoutException:
             raise NavigationError(f"Failed to navigate to notebook {notebook_id}")
+
+    def create_new_notebook(self, notebook_name: str, first_pdf_url: str) -> str:
+        """Create a new notebook and upload an initial PDF/URL.
+
+        Best-practice Selenium implementation using explicit waits and modern locator APIs.
+        Returns the final notebook URL after creation.
+        """
+        if not self.driver:
+            raise NavigationError("Browser driver not initialized")
+        if not notebook_name or not first_pdf_url:
+            raise ValueError("notebook_name and first_pdf_url are required")
+
+        driver = self.driver
+        driver.get("https://notebooklm.google.com/")
+
+        # Locators (kept brittle XPaths for now; TODO: replace with robust data-testid selectors when available)
+        CREATE_BTN_XPATH = "(.//*[normalize-space(text()) and normalize-space(.)='Shared with me'])[1]/following::span[16]"
+        SOURCE_CHIP_XPATH = "//mat-chip[@id='mat-mdc-chip-5']/span[2]/span"
+        URL_INPUT_ID = "mat-input-1"
+        URL_SUBMIT_XPATH = "//mat-dialog-container[@id='mat-mdc-dialog-1']/div/div/upload-dialog/div/div[2]/website-upload/form/button/span[2]"
+        NOTEBOOK_NAME_INPUT_XPATH = "//input"
+
+        wait = WebDriverWait(driver, self.config.timeout)
+
+        def _wait_click(by, value, timeout=None):
+            w = WebDriverWait(driver, timeout or self.config.timeout)
+            elem = w.until(EC.element_to_be_clickable((by, value)))
+            elem.click()
+            return elem
+
+        def _wait_type(by, value, text, clear_first=True, timeout=None):
+            w = WebDriverWait(driver, timeout or self.config.timeout)
+            elem = w.until(EC.presence_of_element_located((by, value)))
+            if clear_first:
+                try:
+                    elem.clear()
+                except Exception:
+                    pass
+            elem.send_keys(text)
+            return elem
+
+        try:
+            _wait_click(By.XPATH, CREATE_BTN_XPATH)
+            _wait_click(By.XPATH, SOURCE_CHIP_XPATH)
+            _wait_click(By.ID, URL_INPUT_ID)  # focus field
+            _wait_type(By.ID, URL_INPUT_ID, first_pdf_url)
+            _wait_click(By.XPATH, URL_SUBMIT_XPATH)
+
+            # Name notebook
+            name_input = _wait_click(By.XPATH, NOTEBOOK_NAME_INPUT_XPATH)
+            _wait_type(By.XPATH, NOTEBOOK_NAME_INPUT_XPATH, notebook_name)
+            name_input.send_keys(Keys.ENTER)
+        except TimeoutException as e:
+            raise NavigationError(f"Timed out creating notebook: {e}") from e
+        except Exception as e:
+            raise NavigationError(f"Failed to create notebook: {e}") from e
+
+        return driver.current_url
+    
+    def upload_pdf(self, notebook_id: str, pdf_url: str) -> str:
+        """Upload a PDF/URL into an existing notebook.
+
+        Navigates to the notebook (if not already there) and performs the upload flow.
+        Returns the notebook URL after upload.
+        """
+        if not self.driver:
+            raise NavigationError("Browser driver not initialized")
+        if not notebook_id or not pdf_url:
+            raise ValueError("notebook_id and pdf_url are required")
+
+        driver = self.driver
+        driver.get(f"https://notebooklm.google.com/notebook/{notebook_id}")
+
+        # Locators (retain original XPaths; TODO replace with stable attributes)
+        ADD_SOURCE_BTN_XPATH = "//div/div/div/button/span[4]"
+        URL_CHIP_XPATH = "//mat-chip[@id='mat-mdc-chip-1']/span[2]/span/span[2]/span"
+        URL_LABEL_XPATH = "//label[@id='mat-mdc-form-field-label-0']/mat-label"
+        URL_INPUT_ID = "mat-input-0"
+        URL_SUBMIT_XPATH = "//mat-dialog-container[@id='mat-mdc-dialog-0']/div/div/upload-dialog/div/div[2]/website-upload/form/button/span[2]"
+
+        def _wait_click(by, value, timeout=None):
+            w = WebDriverWait(driver, timeout or self.config.timeout)
+            elem = w.until(EC.element_to_be_clickable((by, value)))
+            elem.click()
+            return elem
+
+        def _wait_type(by, value, text, clear_first=True, timeout=None):
+            w = WebDriverWait(driver, timeout or self.config.timeout)
+            elem = w.until(EC.presence_of_element_located((by, value)))
+            if clear_first:
+                try:
+                    elem.clear()
+                except Exception:
+                    pass
+            elem.send_keys(text)
+            return elem
+
+        try:
+            _wait_click(By.XPATH, ADD_SOURCE_BTN_XPATH)
+            _wait_click(By.XPATH, URL_CHIP_XPATH)
+            _wait_click(By.XPATH, URL_LABEL_XPATH)  # focus input via label
+            _wait_type(By.ID, URL_INPUT_ID, pdf_url)
+            _wait_click(By.XPATH, URL_SUBMIT_XPATH)
+        except TimeoutException as e:
+            raise NavigationError(f"Timed out uploading PDF: {e}") from e
+        except Exception as e:
+            raise NavigationError(f"Failed to upload PDF: {e}") from e
+
+        return driver.current_url
+    
+    def _is_element_present(self, how, what):
+        try: self.driver.find_element(by=how, value=what)
+        except NoSuchElementException as e: return False
+        return True
+    
+    def _is_alert_present(self):
+        try: self.driver.switch_to_alert()
+        except NoAlertPresentException as e: return False
+        return True
+    
+    def _close_alert_and_get_its_text(self):
+        try:
+            alert = self.driver.switch_to_alert()
+            alert_text = alert.text
+            if self.accept_next_alert:
+                alert.accept()
+            else:
+                alert.dismiss()
+            return alert_text
+        finally: self.accept_next_alert = True
 
     async def close(self) -> None:
         """Close browser session"""

@@ -46,11 +46,26 @@ class NavigateRequest(BaseModel):
 
     notebook_id: str = Field(..., description="The notebook ID to navigate to")
 
+class UploadPDFRequest(BaseModel):
+    """Request model for uploading a PDF to a notebook"""
 
+    notebook_id: str = Field(..., description="The notebook ID to upload PDF to")
+    first_pdf_url: str = Field(
+        ..., description="PDF URL to upload to the specified notebook"
+    )
+    
 class SetNotebookRequest(BaseModel):
     """Request model for setting default notebook"""
 
     notebook_id: str = Field(..., description="The notebook ID to set as default")
+
+class CreateNotebookRequest(BaseModel):
+    """Request model for creating a new notebook with at least one PDF URL"""
+
+    notebook_name: str = Field(..., description="The notebook name to create")
+    first_pdf_url: str = Field(
+        ..., description="First PDF URL to upload when creating notebook"
+    )
 
 
 class NotebookLMFastMCP:
@@ -112,6 +127,46 @@ class NotebookLMFastMCP:
                     "message": f"Health check failed: {e}",
                     "authenticated": False,
                 }
+                
+        @self.app.tool()
+        async def create_notebook(request: CreateNotebookRequest) -> Dict[str, Any]:
+            """Create a new notebook with the given name and first PDF URL."""
+            try:
+                await self._ensure_client()
+                notebook_url = self.client.create_new_notebook(
+                    notebook_name=request.notebook_name,
+                    first_pdf_url=request.first_pdf_url,
+                )
+
+                logger.info(f"Notebook created successfully: {notebook_url}")
+                return {
+                    "status": "success",
+                    "notebook_url": notebook_url,
+                    "message": f"Notebook '{request.notebook_name}' created successfully",
+                }
+
+            except Exception as e:
+                logger.error(f"Failed to create notebook: {e}")
+                raise NotebookLMError(f"Failed to create notebook: {e}")
+            
+        @self.app.tool()
+        async def upload_pdf(request: UploadPDFRequest) -> Dict[str, Any]:
+            """Upload a PDF to the specified notebook."""
+            try:
+                await self._ensure_client()
+                await self.client.navigate_to_notebook(request.notebook_id)
+                self.client.upload_pdf(request.notebook_id, request.first_pdf_url)
+
+                logger.info(f"PDF uploaded successfully to notebook: {request.notebook_id}")
+                return {
+                    "status": "success",
+                    "notebook_id": request.notebook_id,
+                    "message": f"PDF uploaded successfully to notebook {request.notebook_id}",
+                }
+
+            except Exception as e:
+                logger.error(f"Failed to upload PDF: {e}")
+                raise NotebookLMError(f"Failed to upload PDF: {e}")
 
         @self.app.tool()
         async def send_chat_message(request: SendMessageRequest) -> Dict[str, Any]:
