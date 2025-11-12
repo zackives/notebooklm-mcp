@@ -515,11 +515,17 @@ class NotebookLMClient:
             return elem
 
         try:
+            print("Clicking Create New Notebook button...")
             _wait_click(By.XPATH, CREATE_BTN_XPATH)
+            print("Clicking Source Chip...")
             _wait_click(By.XPATH, SOURCE_CHIP_XPATH)
+            print("Focusing URL input field...")
             _wait_click(By.ID, URL_INPUT_ID)  # focus field
+            print(f"Typing first PDF URL: {first_pdf_url}")
             _wait_type(By.ID, URL_INPUT_ID, first_pdf_url)
+            print("Submitting URL...")
             _wait_click(By.XPATH, URL_SUBMIT_XPATH)
+            print("Typing notebook name...")
 
             # Name notebook
             name_input = _wait_click(By.XPATH, NOTEBOOK_NAME_INPUT_XPATH)
