@@ -1,5 +1,5 @@
 version = 1
-revision = 2
+revision = 3
 requires-python = ">=3.10"
 
 [manifest]
@@ -1329,6 +1329,7 @@ dev = [
     { name = "black" },
     { name = "isort" },
     { name = "mypy" },
+    { name = "notebooklm-mcp" },
     { name = "pre-commit" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
@@ -1384,6 +1385,7 @@ dev = [
     { name = "black", specifier = ">=23.0.0" },
     { name = "isort", specifier = ">=5.12.0" },
     { name = "mypy", specifier = ">=1.5.0" },
+    { name = "notebooklm-mcp", editable = "." },
     { name = "pre-commit", specifier = ">=3.3.0" },
     { name = "pytest", specifier = ">=7.4.0" },
     { name = "pytest-asyncio", specifier = ">=0.21.0" },

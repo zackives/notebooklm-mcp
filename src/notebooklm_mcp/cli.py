@@ -701,6 +701,129 @@ def test(ctx: click.Context, notebook: str, headless: bool) -> None:
         sys.exit(1)
 
 
+@cli.command("create-notebook")
+@click.option("--name", "-n", required=True, help="Name for the new notebook")
+@click.option("--pdf-url", "-p", required=True, help="PDF URL to upload initially")
+@click.option("--headless", is_flag=True, help="Run in headless mode")
+@click.pass_context
+def create_notebook(
+    ctx: click.Context, name: str, pdf_url: str, headless: bool
+) -> None:
+    """Create a new NotebookLM notebook with an initial PDF source"""
+    config: ServerConfig = ctx.obj["config"]
+
+    if headless:
+        config.headless = True
+
+    async def run_create() -> None:
+        client = NotebookLMClient(config)
+
+        try:
+            console.print("[yellow]Starting browser...[/yellow]")
+            await client.start()
+
+            console.print("[yellow]Authenticating...[/yellow]")
+            auth_success = await client.authenticate()
+
+            if not auth_success:
+                console.print(
+                    "[red]Authentication failed. Please login manually in browser.[/red]"
+                )
+                if not config.headless:
+                    console.print("[blue]Press Enter when logged in...[/blue]")
+                    input()
+
+            console.print(f"[blue]Creating notebook: {name}[/blue]")
+            console.print(f"[blue]Adding initial source: {pdf_url}[/blue]")
+            
+            notebook_url = client.create_new_notebook(
+                notebook_name=name, first_pdf_url=pdf_url
+            )
+
+            console.print(
+                Panel(
+                    f"[bold green]✅ Notebook Created Successfully![/bold green]\n\n"
+                    f"Name: {name}\n"
+                    f"URL: {notebook_url}\n"
+                    f"Initial Source: {pdf_url}",
+                    title="🎉 New Notebook",
+                )
+            )
+
+        except Exception as e:
+            console.print(f"[red]Failed to create notebook: {e}[/red]")
+            raise
+        finally:
+            await client.close()
+
+    try:
+        asyncio.run(run_create())
+    except Exception as e:
+        console.print(f"[red]Create notebook error: {e}[/red]")
+        sys.exit(1)
+
+
+@cli.command("upload-pdf")
+@click.option("--notebook", "-n", required=True, help="Notebook ID to upload to")
+@click.option("--pdf-url", "-p", required=True, help="PDF URL to upload")
+@click.option("--headless", is_flag=True, help="Run in headless mode")
+@click.pass_context
+def upload_pdf_cmd(
+    ctx: click.Context, notebook: str, pdf_url: str, headless: bool
+) -> None:
+    """Upload a PDF to an existing NotebookLM notebook"""
+    config: ServerConfig = ctx.obj["config"]
+
+    if headless:
+        config.headless = True
+
+    async def run_upload() -> None:
+        client = NotebookLMClient(config)
+
+        try:
+            console.print("[yellow]Starting browser...[/yellow]")
+            await client.start()
+
+            console.print("[yellow]Authenticating...[/yellow]")
+            auth_success = await client.authenticate()
+
+            if not auth_success:
+                console.print(
+                    "[red]Authentication failed. Please login manually in browser.[/red]"
+                )
+                if not config.headless:
+                    console.print("[blue]Press Enter when logged in...[/blue]")
+                    input()
+
+            console.print(f"[blue]Navigating to notebook: {notebook}[/blue]")
+            await client.navigate_to_notebook(notebook)
+
+            console.print(f"[blue]Uploading PDF: {pdf_url}[/blue]")
+            result_url = client.upload_pdf(notebook_id=notebook, pdf_url=pdf_url)
+
+            console.print(
+                Panel(
+                    f"[bold green]✅ PDF Uploaded Successfully![/bold green]\n\n"
+                    f"Notebook: {notebook}\n"
+                    f"PDF URL: {pdf_url}\n"
+                    f"Result: {result_url}",
+                    title="📄 PDF Upload Complete",
+                )
+            )
+
+        except Exception as e:
+            console.print(f"[red]Failed to upload PDF: {e}[/red]")
+            raise
+        finally:
+            await client.close()
+
+    try:
+        asyncio.run(run_upload())
+    except Exception as e:
+        console.print(f"[red]Upload PDF error: {e}[/red]")
+        sys.exit(1)
+
+
 async def guided_setup(config: ServerConfig) -> bool:
     """Guided setup flow for first-time users
 

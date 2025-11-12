@@ -135,3 +135,105 @@ def test_extract_notebook_id_invalid():
         assert "Invalid NotebookLM URL" in str(exc)
     else:  # pragma: no cover - defensive
         raise AssertionError("Expected ValueError for invalid URL")
+
+
+def test_create_notebook_command(monkeypatch, tmp_path):
+    setup_cli(monkeypatch, tmp_path)
+    config_path = make_config_file(tmp_path)
+
+    created = {}
+
+    class DummyClient:
+        def __init__(self, cfg):
+            self.config = cfg
+            self.calls = []
+            created["client"] = self
+
+        async def start(self):
+            self.calls.append("start")
+
+        async def authenticate(self):
+            self.calls.append("authenticate")
+            return True
+
+        def create_new_notebook(self, notebook_name, first_pdf_url):
+            self.calls.append(("create", notebook_name, first_pdf_url))
+            return f"https://notebooklm.google.com/notebook/new-id-123"
+
+        async def close(self):
+            self.calls.append("close")
+
+    monkeypatch.setattr(cli_module, "NotebookLMClient", DummyClient)
+    monkeypatch.setattr(cli_module.asyncio, "run", run_asyncio)
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli_module.cli,
+        [
+            "--config",
+            str(config_path),
+            "create-notebook",
+            "--name",
+            "Test Notebook",
+            "--pdf-url",
+            "https://example.com/paper.pdf",
+        ],
+    )
+
+    assert result.exit_code == 0
+    client = created["client"]
+    assert ("create", "Test Notebook", "https://example.com/paper.pdf") in client.calls
+    assert "close" in client.calls
+
+
+def test_upload_pdf_command(monkeypatch, tmp_path):
+    setup_cli(monkeypatch, tmp_path)
+    config_path = make_config_file(tmp_path)
+
+    created = {}
+
+    class DummyClient:
+        def __init__(self, cfg):
+            self.config = cfg
+            self.calls = []
+            created["client"] = self
+
+        async def start(self):
+            self.calls.append("start")
+
+        async def authenticate(self):
+            self.calls.append("authenticate")
+            return True
+
+        async def navigate_to_notebook(self, notebook_id):
+            self.calls.append(("navigate", notebook_id))
+
+        def upload_pdf(self, notebook_id, pdf_url):
+            self.calls.append(("upload", notebook_id, pdf_url))
+            return f"https://notebooklm.google.com/notebook/{notebook_id}"
+
+        async def close(self):
+            self.calls.append("close")
+
+    monkeypatch.setattr(cli_module, "NotebookLMClient", DummyClient)
+    monkeypatch.setattr(cli_module.asyncio, "run", run_asyncio)
+
+    runner = CliRunner()
+    result = runner.invoke(
+        cli_module.cli,
+        [
+            "--config",
+            str(config_path),
+            "upload-pdf",
+            "--notebook",
+            "test-notebook-id",
+            "--pdf-url",
+            "https://example.com/document.pdf",
+        ],
+    )
+
+    assert result.exit_code == 0
+    client = created["client"]
+    assert ("navigate", "test-notebook-id") in client.calls
+    assert ("upload", "test-notebook-id", "https://example.com/document.pdf") in client.calls
+    assert "close" in client.calls

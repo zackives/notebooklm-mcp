@@ -67,6 +67,7 @@ dev = [
     "isort>=5.12.0",
     "mypy>=1.5.0",
     "pre-commit>=3.3.0",
+    "notebooklm-mcp",
 ]
 test = [
     "pytest>=7.4.0",
@@ -119,6 +120,7 @@ conflicts = []
 
 # Sources configuration for alternative package locations
 [tool.uv.sources]
+notebooklm-mcp = { workspace = true }
 # Example: Use development version of fastmcp if needed
 # fastmcp = { git = "https://github.com/jlowin/fastmcp", branch = "main" }
 
